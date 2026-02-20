@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optical Fiber: NA & Acceptance Angle Simulator</title>
+    <style>
+        :root {
+            --primary-bg: #1a1a1a;
+            --sidebar-bg: #2d2d2d;
+            --accent-color: #00e676;
+            --text-color: #e0e0e0;
+            --panel-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* Layout */
+        .sidebar {
+            width: 350px;
+            background-color: var(--sidebar-bg);
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .main-display {
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Typography & UI Elements */
+        h2 { color: var(--accent-color); margin-top: 0; font-size: 1.4rem; }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-size: 0.9rem; }
+        
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: var(--accent-color);
+        }
+
+        .output-card {
+            background: #3d3d3d;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-color);
+            margin-top: 10px;
+        }
+
+        .output-val {
+            font-weight: bold;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--accent-color);
+            font-size: 1.1rem;
+        }
+
+        canvas {
+            background: #000;
+            border-radius: 12px;
+            box-shadow: var(--panel-shadow);
+            max-width: 100%;
+            height: auto;
+        }
+
+        .instructions {
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: #bbb;
+        }
+
+        /* Calculations helper */
+        .formula { font-style: italic; font-size: 0.8rem; color: #888; }
+    </style>
+</head>
+<body>
+
+    <aside class="sidebar">
+        <h2>Lab Controls</h2>
+        
+        <div class="control-group">
+            <label>Core Refractive Index (n1): <span id="n1-val" class="output-val">1.50</span></label>
+            <input type="range" id="n1" min="1.42" max="1.80" step="0.01" value="1.50">
+        </div>
+
+        <div class="control-group">
+            <label>Cladding Refractive Index (n2): <span id="n2-val" class="output-val">1.40</span></label>
+            <input type="range" id="n2" min="1.30" max="1.45" step="0.01" value="1.40">
+        </div>
+
+        <div class="control-group">
+            <label>Input Angle (θ) in Degrees: <span id="theta-val" class="output-val">15°</span></label>
+            <input type="range" id="theta" min="0" max="60" step="0.5" value="15">
+        </div>
+
+        <div class="output-card">
+            <div>Numerical Aperture (NA): <span id="na-res" class="output-val">0.54</span></div>
+            <div class="formula">NA = √(n₁² - n₂²)</div>
+            <hr style="border:0; border-top:1px solid #555; margin:10px 0;">
+            <div>Acceptance Angle (θa): <span id="aa-res" class="output-val">32.6°</span></div>
+            <div class="formula">θa = sin⁻¹(NA)</div>
+        </div>
+
+        <div class="instructions">
+            <strong>Observation:</strong><br>
+            If <em>Input Angle > Acceptance Angle</em>, the light ray escapes the core (Refraction). <br><br>
+            If <em>Input Angle ≤ Acceptance Angle</em>, the light ray undergoes Total Internal Reflection (TIR).
+        </div>
+    </aside>
+
+    <main class="main-display">
+        <canvas id="fiberCanvas"></canvas>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('fiberCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Setup Canvas Size
+        canvas.width = 800;
+        canvas.height = 400;
+
+        // Inputs
+        const n1Slider = document.getElementById('n1');
+        const n2Slider = document.getElementById('n2');
+        const thetaSlider = document.getElementById('theta');
+
+        function draw() {
+            // Get values
+            let n1 = parseFloat(n1Slider.value);
+            let n2 = parseFloat(n2Slider.value);
+            let thetaDeg = parseFloat(thetaSlider.value);
+            
+            // Update UI
+            document.getElementById('n1-val').textContent = n1.toFixed(2);
+            document.getElementById('n2-val').textContent = n2.toFixed(2);
+            document.getElementById('theta-val').textContent = thetaDeg + "°";
+
+            // Calculations
+            let na = Math.sqrt(Math.pow(n1, 2) - Math.pow(n2, 2));
+            let accAngleRad = Math.asin(na);
+            let accAngleDeg = accAngleRad * (180 / Math.PI);
+
+            document.getElementById('na-res').textContent = na.toFixed(3);
+            document.getElementById('aa-res').textContent = isNaN(accAngleDeg) ? "Invalid" : accAngleDeg.toFixed(2) + "°";
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const centerY = canvas.height / 2;
+            const coreHalfWidth = 60;
+            const fiberStart = 200;
+
+            // 1. Draw Cladding
+            ctx.fillStyle = "#333";
+            ctx.fillRect(fiberStart, centerY - 120, 500, 240);
+
+            // 2. Draw Core
+            ctx.fillStyle = "#444";
+            ctx.fillRect(fiberStart, centerY - coreHalfWidth, 500, coreHalfWidth * 2);
+            
+            // Labels
+            ctx.fillStyle = "#aaa";
+            ctx.font = "14px Arial";
+            ctx.fillText("Cladding (n2)", fiberStart + 10, centerY - 80);
+            ctx.fillText("Core (n1)", fiberStart + 10, centerY - 10);
+            ctx.fillText("Air (n0=1)", 50, centerY - 100);
+
+            // 3. Ray Tracing Logic
+            let thetaRad = thetaDeg * (Math.PI / 180);
+            let rayColor = (thetaDeg <= accAngleDeg) ? "#00ff00" : "#ff3d00"; // Green for TIR, Red for Loss
+            
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = rayColor;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = rayColor;
+
+            // External Ray (From Laser to Fiber Entrance)
+            ctx.beginPath();
+            ctx.moveTo(0, centerY - (Math.tan(thetaRad) * fiberStart));
+            ctx.lineTo(fiberStart, centerY);
+            ctx.stroke();
+
+            // Internal Ray 1 (Snell's Law at entrance: 1 * sin(theta) = n1 * sin(phi))
+            let phiRad = Math.asin(Math.sin(thetaRad) / n1);
+            let distToWall = coreHalfWidth / Math.tan(phiRad);
+            
+            let hitX = fiberStart + distToWall;
+            let hitY = centerY - coreHalfWidth;
+
+            ctx.beginPath();
+            ctx.moveTo(fiberStart, centerY);
+
+            if (hitX > fiberStart + 500) {
+                // Ray goes straight through if angle is very small
+                ctx.lineTo(fiberStart + 500, centerY - (Math.tan(phiRad) * 500));
+                ctx.stroke();
+            } else {
+                ctx.lineTo(hitX, hitY);
+                ctx.stroke();
+
+                // Check for TIR at Core-Cladding interface
+                // Critical Angle = arcsin(n2/n1)
+                // Internal angle relative to normal = 90 - phi
+                let criticalAngleRad = Math.asin(n2 / n1);
+                let internalAngleRad = (Math.PI / 2) - phiRad;
+
+                if (internalAngleRad >= criticalAngleRad) {
+                    // TIR Occurs - Bounce
+                    ctx.beginPath();
+                    ctx.moveTo(hitX, hitY);
+                    ctx.lineTo(hitX + distToWall * 2, centerY + coreHalfWidth);
+                    ctx.stroke();
+                } else {
+                    // Refraction/Loss - Ray escapes into cladding
+                    ctx.setLineDash([5, 5]); // Dashed for lost ray
+                    ctx.beginPath();
+                    ctx.moveTo(hitX, hitY);
+                    ctx.lineTo(hitX + 100, hitY - 40); 
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+            
+            ctx.shadowBlur = 0; // Reset shadow
+        }
+
+        // Listeners
+        [n1Slider, n2Slider, thetaSlider].forEach(item => {
+            item.addEventListener('input', draw);
+        });
+
+        // Initial Draw
+        draw();
+    </script>
+</body>
+</html>
